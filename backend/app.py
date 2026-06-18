@@ -4,32 +4,67 @@ from src.job_api import fetch_jobs_from_resume
 import pyttsx3
 import threading
 
-st.set_page_config(page_title="AI Career and Job Recommendation", page_icon="🧑🏻‍🎓", layout="wide")
+# ✅ MongoDB IMPORTS (ADDED)
+from pymongo import MongoClient
+from dotenv import load_dotenv
+import os
+
+# ✅ LOAD ENV (ADDED)
+load_dotenv()
+MONGO_URI = os.getenv("MONGO_URI")
+
+# ✅ CONNECT MONGODB (ADDED)
+client = MongoClient(MONGO_URI)
+db = client["ai_resume_builder"]
+collection = db["resumes"]
+
+print("✅ MongoDB Connected")
+
+st.set_page_config(
+    page_title="AI Career and Job Recommendation", page_icon="🧑🏻‍🎓", layout="wide"
+)
 
 # ---------- THEME TOGGLE ----------
 theme_choice = st.sidebar.radio("Theme", ["Dark", "Light"], index=0)
 if theme_choice == "Dark":
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         html, body, .stApp { background-color:#0b0f14 !important; color:#e6eef6 !important; }
         .stButton>button { cursor:pointer; }
         </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 else:
-    st.markdown("""
+    st.markdown(
+        """
         <style>
         html, body, .stApp { background-color:#ffffff !important; color:#0b0b0b !important; }
         .stButton>button { cursor:pointer; }
         .resume-box { background-color:#f7f7f7 !important; color:#000 !important; }
         </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 st.title("📄 AI Career and Job Recommendation")
-st.markdown("Upload your resume and get AI-based analysis with job recommendations from LinkedIn and Naukri.")
+st.markdown(
+    "Upload your resume and get AI-based analysis with job recommendations from LinkedIn and Naukri."
+)
 
 # ---------- GLOBAL STATE ----------
 _tts_state = {"thread": None, "stop_event": None}
-for key in ["resume_text", "summary", "gaps", "roadmap", "tts_playing", "tts_chunks", "jobs", "keywords"]:
+for key in [
+    "resume_text",
+    "summary",
+    "gaps",
+    "roadmap",
+    "tts_playing",
+    "tts_chunks",
+    "jobs",
+    "keywords",
+]:
     if key not in st.session_state:
         st.session_state[key] = None if key not in ["tts_playing"] else False
 
@@ -37,7 +72,9 @@ for key in ["resume_text", "summary", "gaps", "roadmap", "tts_playing", "tts_chu
 # ---------- TEXT SPLITTER ----------
 def split_text(text, chunk_size=180):
     words = text.split()
-    return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+    return [
+        " ".join(words[i : i + chunk_size]) for i in range(0, len(words), chunk_size)
+    ]
 
 
 # ---------- TTS THREAD ----------
@@ -96,7 +133,11 @@ if st.session_state.summary:
         if not st.session_state.tts_playing:
             stop_event = threading.Event()
             _tts_state["stop_event"] = stop_event
-            th = threading.Thread(target=_speak_chunks_worker, args=(st.session_state.tts_chunks, stop_event), daemon=True)
+            th = threading.Thread(
+                target=_speak_chunks_worker,
+                args=(st.session_state.tts_chunks, stop_event),
+                daemon=True,
+            )
             th.start()
             _tts_state["thread"] = th
             st.session_state.tts_playing = True
@@ -106,12 +147,14 @@ if st.session_state.summary:
             st.session_state.tts_playing = False
 
     # ---------- DOWNLOAD PDF ----------
-    pdf_buffer = generate_pdf_report(st.session_state.summary, st.session_state.gaps, st.session_state.roadmap)
+    pdf_buffer = generate_pdf_report(
+        st.session_state.summary, st.session_state.gaps, st.session_state.roadmap
+    )
     st.download_button(
         "📥 Download Resume Analysis Report",
         data=pdf_buffer.getvalue(),
         file_name="resume_analysis_report.pdf",
-        mime="application/pdf"
+        mime="application/pdf",
     )
 
 # ---------- STEP 3: JOB RECOMMENDATIONS ----------
@@ -121,9 +164,13 @@ if st.session_state.summary and st.button("🔎 Get Job Recommendations"):
     st.session_state.tts_playing = False
 
     with st.spinner("🧩 Extracting job keywords..."):
-        st.session_state.keywords = ask_gemini(
-            f"Based on this resume summary, list 8–10 ideal IT job titles (comma-separated):\n\n{st.session_state.summary}"
-        ).replace("\n", "").strip()
+        st.session_state.keywords = (
+            ask_gemini(
+                f"Based on this resume summary, list 8–10 ideal IT job titles (comma-separated):\n\n{st.session_state.summary}"
+            )
+            .replace("\n", "")
+            .strip()
+        )
 
     st.success(f"**Extracted Job Keywords:** {st.session_state.keywords}")
 
@@ -138,13 +185,21 @@ if st.session_state.summary and st.button("🔎 Get Job Recommendations"):
             title = job.get("title", "Untitled Job")
             company = job.get("company", "Unknown")
             location = job.get("location", "Not specified")
-            link = job.get("link") or f"https://www.google.com/search?q={title.replace(' ', '+')}+{company.replace(' ', '+')}+jobs"
-            st.markdown(f"""
+            link = (
+                job.get("link")
+                or f"https://www.google.com/search?q={title.replace(' ', '+')}+{company.replace(' ', '+')}+jobs"
+            )
+            st.markdown(
+                f"""
             <div style='background-color:#1a1d21; padding:15px; border-radius:10px; margin-bottom:12px; color:white;'>
                 <h4>{title}</h4>
                 <p><b>{company}</b> | 📍 {location}</p>
                 <a href="{link}" target="_blank" style='background-color:#0A66C2; color:white; padding:8px 12px; border-radius:6px; text-decoration:none;'>🔗 View Job</a>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
     else:
-        st.warning("⚠️ No IT jobs found. Try re-uploading a more detailed resume or check your keywords.")
+        st.warning(
+            "⚠️ No IT jobs found. Try re-uploading a more detailed resume or check your keywords."
+        )
